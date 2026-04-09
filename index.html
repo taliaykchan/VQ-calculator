@@ -198,7 +198,7 @@
         }, 300);
 
         try {
-            aiModel = await deeplab.load({base: 'ade20k'});
+            aiModel = await deeplab.load({base: 'ade20k', quantizationBytes: 4});
             clearInterval(loaderInterval);
             updateProgress(100, "Model loaded. Ready for images!");
             setTimeout(() => hideProgress("Awaiting images..."), 1000);
