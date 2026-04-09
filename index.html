@@ -167,11 +167,24 @@
     function determineWeight(label) {
         if (!label) return 1;
         const l = label.toLowerCase();
-        if (l.match(/tree|grass|earth|mountain|water|sea|river|lake|flower|animal|waterfall|field|land|hill|sand|rock|dirt track|fountain|terrain/)) return 5;
-        if (l.match(/sky|palm|plant|shrub|bush/)) return 4;
+    
+        // WEIGHT 5: Specific Nature & Water (plus hallucinated 'floors')
+        if (l.match(/tree|grass|earth|mountain|water|sea|river|lake|flower|animal|waterfall|field|land|hill|sand|rock|dirt track|fountain|terrain|floor|plant|palm/)) return 5;
+        
+        // WEIGHT 4: Sky (plus hallucinated 'ceilings')
+        if (l.match(/sky|ceiling/)) return 4;
+        
+        // WEIGHT 3: Indoor planting (specific pots/vases)
         if (l.match(/pot|vase/)) return 3;
+        
+        // WEIGHT 2: Digital/Visual nature
         if (l.match(/painting|poster|screen|television|monitor|sculpture|crt screen|glass/)) return 2;
-        return 1;
+        
+        // WEIGHT 1: Man-made / Urban (Explicitly defined)
+        // This ensures buildings/walls are NEVER counted as nature
+        if (l.match(/wall|building|skyscraper|house|road|sidewalk|fence|railing|car|bus|truck|windowpane|door|apparel|person|signboard|bridge|tower/)) return 1;
+        
+        return 1; // Default for everything else
     }
 
     let aiModel = null;
@@ -311,13 +324,34 @@
             const classId = segmentationMap[i];
             let labelName = ade20kLabels[classId] || 'unknown';
             
-            // Heuristics for flat skies and water
-            if (labelName === 'unknown' || labelName === 'background') {
+            // SMART HEURISTIC for "Unknown/Background"
+            if (labelName === 'unknown' || labelName === 'background' || labelName.includes('unrecognized')) {
                 const yRatio = Math.floor(i / width) / height;
-                if (yRatio < 0.50) labelName = 'sky (heuristic)';
-                else if (yRatio >= 0.50 && yRatio < 0.90) labelName = 'water/terrain (heuristic)';
-                else labelName = 'unrecognized structure';
+                
+                if (yRatio < 0.40) {
+                    // Only top 40% is rescued as Sky. 
+                    // This prevents the AI from calling a building on the horizon "Sky".
+                    labelName = 'sky (heuristic)'; 
+                } else {
+                    // If it's unknown in the bottom 60%, it's likely a man-made surface 
+                    // (concrete, grey wall, or road) and should be Weight 1 for BEAM safety.
+                    labelName = 'unspecified man-made/unknown';
+                }
             }
+            
+            pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
+            const weight = determineWeight(labelName);
+            const dataIndex = i * 4;
+        
+            // Apply Mask Colors
+            if (dataIndex + 3 < imageData.data.length) {
+                if (weight === 5) { imageData.data.set([39, 174, 96, 160], dataIndex); }      // Green (Nature)
+                else if (weight === 4) { imageData.data.set([41, 128, 185, 160], dataIndex); } // Blue (Sky)
+                else if (weight === 3) { imageData.data.set([142, 68, 173, 160], dataIndex); } // Purple (Indoor)
+                else if (weight === 2) { imageData.data.set([243, 156, 18, 160], dataIndex); } // Orange (Visual)
+                else { imageData.data.set([0, 0, 0, 0], dataIndex); }                          // Transparent (Man-made)
+            }
+        }
             
             pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
             const weight = determineWeight(labelName);
