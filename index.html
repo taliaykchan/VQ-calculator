@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scenery & Nature Analyzer</title>
+    <!-- Load TensorFlow.js and DeepLab -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 { margin-top: 0; color: #2c3e50; }
+        .upload-btn {
+            background-color: #27ae60;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .upload-btn:hover { background-color: #219653; }
+        #image-wrapper {
+            position: relative;
+            display: inline-block;
+            margin-top: 20px;
+            max-width: 100%;
+        }
+        img, canvas {
+            max-width: 100%;
+            border-radius: 5px;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0.7; /* Controls mask transparency */
+            pointer-events: none;
+        }
+        #status {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #34495e;
+        }
+        .score-box {
+            font-size: 28px;
+            color: #27ae60;
+            margin: 15px 0;
+            padding: 15px;
+            border: 2px dashed #27ae60;
+            border-radius: 10px;
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            text-align: left;
+        }
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        th { background-color: #ecf0f1; }
+        .weight-5 { color: #27ae60; font-weight: bold; }
+        .weight-4 { color: #2980b9; font-weight: bold; }
+        .weight-3 { color: #8e44ad; font-weight: bold; }
+        .weight-2 { color: #f39c12; font-weight: bold; }
+        .weight-1 { color: #c0392b; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Scenery & Nature Analyzer</h1>
+    <p>Upload an image to calculate the weighted visual connection to nature.</p>
+    
+    <input type="file" id="upload" accept="image/*" style="display: none;">
+    <button class="upload-btn" onclick="document.getElementById('upload').click()">Upload Scenery Image</button>
+
+    <div id="status">Waiting for image...</div>
+    <div class="score-box" id="final-score"></div>
+
+    <div id="image-wrapper">
+        <img id="source-image" style="display: none;">
+        <canvas id="mask-canvas"></canvas>
+    </div>
+
+    <table id="results-table" style="display: none;">
+        <thead>
+            <tr>
+                <th>Category / Label found</th>
+                <th>Pixels Found</th>
+                <th>Assigned Weight</th>
+            </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+    </table>
+</div>
+
+<script>
+    // The 150 labels that the ADE20K model is trained to recognize.
+    // The index in this array matches the ID returned by the model's pixels.
+    const ade20kLabels = "wall,building,sky,floor,tree,ceiling,road,bed,windowpane,grass,cabinet,sidewalk,person,earth,door,table,mountain,plant,curtain,chair,car,water,painting,sofa,shelf,house,sea,mirror,rug,field,armchair,seat,fence,desk,rock,wardrobe,lamp,bathtub,railing,cushion,base,box,column,signboard,chest of drawers,counter,sand,sink,skyscraper,fireplace,refrigerator,grandstand,path,stairs,runway,case,pool table,pillow,screen door,stairway,river,bridge,bookcase,blind,coffee table,toilet,flower,book,hill,bench,countertop,stove,palm,kitchen island,computer,swivel chair,boat,bar,arcade machine,hovel,bus,towel,light,truck,tower,chandelier,awning,streetlight,booth,television,airplane,dirt track,apparel,pole,land,bannister,escalator,ottoman,bottle,buffet,poster,stage,van,ship,fountain,conveyer belt,canopy,washer,plaything,swimming pool,stool,barrel,basket,waterfall,tent,bag,minibike,cradle,oven,ball,food,step,tank,trade name,microwave,pot,animal,bicycle,lake,dishwasher,screen,blanket,sculpture,hood,sconce,vase,traffic light,tray,ashcan,fan,pier,crt screen,plate,monitor,bulletin board,shower,radiator,glass,clock,flag".split(",");
+
+    // The Logic Engine: Maps the AI's identified labels to your 5-point scale
+    function determineWeight(label) {
+        if (!label) return 1;
+        const l = label.toLowerCase();
+
+        // Weight 5: Natural terrain, water, extensive greenery, trees, flowers, animals
+        if (l.match(/tree|grass|earth|mountain|water|sea|river|lake|flower|animal|waterfall|field|land|hill|sand|rock|dirt track|fountain/)) return 5;
+        
+        // Weight 4: Outdoor planting, sky (Note: general 'plant' and 'palm' mapped here)
+        if (l.match(/sky|palm|plant|shrub|bush/)) return 4;
+        
+        // Weight 3: Indoor planting
+        if (l.match(/pot|vase/)) return 3;
+        
+        // Weight 2: Digital medium, drawings, screens, paintings
+        if (l.match(/painting|poster|screen|television|monitor|sculpture|crt screen|glass/)) return 2;
+        
+        // Weight 1: No visual connection (buildings, roads, furniture, etc.)
+        return 1;
+    }
+
+    let aiModel = null;
+
+    // Initialize the model as soon as the page loads
+    async function loadModel() {
+        document.getElementById('status').innerText = "Loading AI Model... (This may take a moment on first load)";
+        try {
+            // Using ade20k for scenery. Quantization helps it run faster in-browser.
+            aiModel = await deeplab.load({base: 'ade20k', quantizationBytes: 2});
+            document.getElementById('status').innerText = "Model loaded. Ready for an image!";
+        } catch (error) {
+            document.getElementById('status').innerText = "Error loading model. Please refresh.";
+            console.error(error);
+        }
+    }
+
+    loadModel();
+
+    document.getElementById('upload').addEventListener('change', (event) => {
+        if (!aiModel) {
+            alert("Please wait for the model to finish loading.");
+            return;
+        }
+        
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const imgElement = document.getElementById('source-image');
+        const reader = new FileReader();
+        
+        reader.onload = (e) => {
+            imgElement.src = e.target.result;
+            imgElement.style.display = "block";
+            imgElement.onload = () => {
+                analyzeImage(imgElement);
+            }
+        };
+        reader.readAsDataURL(file);
+    });
+
+async function analyzeImage(imgElement) {
+    document.getElementById('status').innerText = "Analyzing pixels... please wait.";
+    document.getElementById('final-score').style.display = "none";
+    document.getElementById('results-table').style.display = "none";
+
+    try {
+        // 1. Get the segmentation map
+        const prediction = await aiModel.segment(imgElement);
+        // CRITICAL: We must use the width/height the MODEL returns, 
+        // not the original image width/height.
+        const { segmentationMap, height, width } = prediction;
+
+        // 2. Sync Canvas to the MODEL'S dimensions
+        const canvas = document.getElementById('mask-canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Ensure the overlay canvas matches the visual display size of the image
+        canvas.style.width = imgElement.clientWidth + "px";
+        canvas.style.height = imgElement.clientHeight + "px";
+
+        const imageData = ctx.createImageData(width, height);
+
+        // 3. Process the Pixels
+        const pixelCounts = {};
+        
+        for (let i = 0; i < segmentationMap.length; i++) {
+            const classId = segmentationMap[i];
+            const labelName = ade20kLabels[classId] || 'unknown';
+            
+            pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
+
+            const weight = determineWeight(labelName);
+            const dataIndex = i * 4;
+
+            // Use .set() safely by ensuring we don't exceed array length
+            if (dataIndex + 3 < imageData.data.length) {
+                if (weight === 5) { imageData.data.set([39, 174, 96, 200], dataIndex); }      // Green
+                else if (weight === 4) { imageData.data.set([41, 128, 185, 200], dataIndex); } // Blue
+                else if (weight === 3) { imageData.data.set([142, 68, 173, 200], dataIndex); } // Purple
+                else if (weight === 2) { imageData.data.set([243, 156, 18, 200], dataIndex); } // Orange
+                else { imageData.data.set([0, 0, 0, 0], dataIndex); }                          // Transparent
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        calculateAndDisplayScores(pixelCounts, segmentationMap.length);
+
+    } catch (err) {
+        console.error("Analysis failed:", err);
+        document.getElementById('status').innerText = "Error during analysis. Check console.";
+    }
+}
+
+    function calculateAndDisplayScores(pixelCounts, totalPixels) {
+        let totalWeightedPoints = 0;
+        const tbody = document.getElementById('results-body');
+        tbody.innerHTML = "";
+
+        // Sort the labels by pixel count (highest first)
+        const sortedLabels = Object.keys(pixelCounts).sort((a, b) => pixelCounts[b] - pixelCounts[a]);
+
+        sortedLabels.forEach(label => {
+            const count = pixelCounts[label];
+            const weight = determineWeight(label);
+            
+            totalWeightedPoints += (count * weight);
+
+            // Calculate percentage for the table
+            const percentage = ((count / totalPixels) * 100).toFixed(1);
+
+            const row = `<tr>
+                <td>${label.charAt(0).toUpperCase() + label.slice(1)}</td>
+                <td>${count.toLocaleString()} (${percentage}%)</td>
+                <td class="weight-${weight}">Weight: ${weight}</td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+
+        const finalScore = (totalWeightedPoints / totalPixels).toFixed(2);
+        
+        document.getElementById('status').innerText = "Analysis Complete.";
+        const scoreBox = document.getElementById('final-score');
+        scoreBox.innerHTML = `Weighted Image Score: <strong>${finalScore} / 5.00</strong>`;
+        scoreBox.style.display = "block";
+        document.getElementById('results-table').style.display = "table";
+    }
+</script>
+
+</body>
+</html>
