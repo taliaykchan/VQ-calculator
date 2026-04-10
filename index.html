@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scenery & Nature Analyzer Pro (Batch Edition)</title>
+    <title>BEAM Plus Visual Quality Calculator</title>
+    <!-- Load TensorFlow.js and DeepLab -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/deeplab"></script>
     <style>
@@ -105,15 +106,6 @@
             border-radius: 5px;
             display: block;
         }
-        .image-wrapper canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            opacity: 0.6;
-            pointer-events: none;
-        }
         .score-box {
             font-size: 24px;
             color: #27ae60;
@@ -141,7 +133,7 @@
 <body>
 
 <div class="container">
-    <h1>Scenery & Nature Analyzer Pro</h1>
+    <h1>BEAM Plus Visual Quality Calculator</h1>
     <p>Upload one or multiple images to calculate the weighted visual connection to nature.</p>
     
     <!-- Drag and Drop Zone -->
@@ -162,26 +154,27 @@
 </div>
 
 <script>
+    // 151 Labels including "background" at Index 0
     const ade20kLabels = ["background", "wall", "building", "sky", "floor", "tree", "ceiling", "road", "bed", "windowpane", "grass", "cabinet", "sidewalk", "person", "earth", "door", "table", "mountain", "plant", "curtain", "chair", "car", "water", "painting", "sofa", "shelf", "house", "sea", "mirror", "rug", "field", "armchair", "seat", "fence", "desk", "rock", "wardrobe", "lamp", "bathtub", "railing", "cushion", "base", "box", "column", "signboard", "chest of drawers", "counter", "sand", "sink", "skyscraper", "fireplace", "refrigerator", "grandstand", "path", "stairs", "runway", "case", "pool table", "pillow", "screen door", "stairway", "river", "bridge", "bookcase", "blind", "coffee table", "toilet", "flower", "book", "hill", "bench", "countertop", "stove", "palm", "kitchen island", "computer", "swivel chair", "boat", "bar", "arcade machine", "hovel", "bus", "towel", "light", "truck", "tower", "chandelier", "awning", "streetlight", "booth", "television", "airplane", "dirt track", "apparel", "pole", "land", "bannister", "escalator", "ottoman", "bottle", "buffet", "poster", "stage", "van", "ship", "fountain", "conveyer belt", "canopy", "washer", "plaything", "swimming pool", "stool", "barrel", "basket", "waterfall", "tent", "bag", "minibike", "cradle", "oven", "ball", "food", "step", "tank", "trade name", "microwave", "pot", "animal", "bicycle", "lake", "dishwasher", "screen", "blanket", "sculpture", "hood", "sconce", "vase", "traffic light", "tray", "ashcan", "fan", "pier", "crt screen", "plate", "monitor", "bulletin board", "shower", "radiator", "glass", "clock", "flag"];
 
+    // Mapping AI Labels to BEAM Plus Weights
     function determineWeight(label) {
         if (!label) return 1;
         const l = label.toLowerCase();
-    
+
         // WEIGHT 5: Specific Nature & Water (plus hallucinated 'floors')
         if (l.match(/tree|grass|earth|mountain|water|sea|river|lake|flower|animal|waterfall|field|land|hill|sand|rock|dirt track|fountain|terrain|floor|plant|palm/)) return 5;
         
         // WEIGHT 4: Sky (plus hallucinated 'ceilings')
         if (l.match(/sky|ceiling/)) return 4;
         
-        // WEIGHT 3: Indoor planting (specific pots/vases)
+        // WEIGHT 3: Indoor planting
         if (l.match(/pot|vase/)) return 3;
         
         // WEIGHT 2: Digital/Visual nature
         if (l.match(/painting|poster|screen|television|monitor|sculpture|crt screen|glass/)) return 2;
         
-        // WEIGHT 1: Man-made / Urban (Explicitly defined)
-        // This ensures buildings/walls are NEVER counted as nature
+        // WEIGHT 1: Man-made / Urban (Explicitly defined to avoid over-scoring)
         if (l.match(/wall|building|skyscraper|house|road|sidewalk|fence|railing|car|bus|truck|windowpane|door|apparel|person|signboard|bridge|tower/)) return 1;
         
         return 1; // Default for everything else
@@ -202,28 +195,29 @@
         if (text) document.getElementById('status').innerText = text;
     }
 
-    // Load Model with Simulated Progress Bar
+    // Load Full Precision Model
     async function loadModel() {
         let fakeProgress = 0;
         const loaderInterval = setInterval(() => {
-            fakeProgress += (90 - fakeProgress) * 0.1; // Ease towards 90%
+            fakeProgress += (90 - fakeProgress) * 0.1; 
             updateProgress(fakeProgress, "Downloading AI Model... (This happens once)");
         }, 300);
 
         try {
+            // quantizationBytes: 4 forces highest precision math to fix loading errors
             aiModel = await deeplab.load({base: 'ade20k', quantizationBytes: 4});
             clearInterval(loaderInterval);
             updateProgress(100, "Model loaded. Ready for images!");
             setTimeout(() => hideProgress("Awaiting images..."), 1000);
         } catch (error) {
             clearInterval(loaderInterval);
-            hideProgress("Error loading model. Please refresh.");
+            hideProgress("Error loading model. Check browser console.");
             console.error(error);
         }
     }
     loadModel();
 
-    // Drag and Drop Event Listeners
+    // Drag and Drop Logic
     const dropZone = document.getElementById('drop-zone');
     const uploadInput = document.getElementById('upload');
 
@@ -245,14 +239,14 @@
     dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files), false);
     uploadInput.addEventListener('change', (e) => handleFiles(e.target.files), false);
 
-    // Main File Handler (Batch Queue)
+    // Batch File Handler
     async function handleFiles(files) {
         if (!aiModel) return alert("Please wait for the model to finish loading.");
         if (files.length === 0 || isProcessing) return;
         
         isProcessing = true;
         const feed = document.getElementById('results-feed');
-        feed.innerHTML = ''; // Clear previous results
+        feed.innerHTML = ''; 
 
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -276,10 +270,9 @@
 
         hideProgress(`Batch Complete! Processed ${files.length} images.`);
         isProcessing = false;
-        uploadInput.value = ''; // Reset input
+        uploadInput.value = ''; 
     }
 
-    // Promisify File Reader
     function readFileAsImage(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -294,7 +287,7 @@
         });
     }
 
-    // Processing Logic for a Single Image
+    // Core Analysis Function
     async function analyzeSingleImage(imgElement, filename) {
         // 1. Auto-Downscale
         const maxDim = 800;
@@ -312,7 +305,7 @@
         const prediction = await aiModel.segment(tempCanvas);
         const { segmentationMap, height, width } = prediction;
 
-        // 3. Process Pixels
+        // 3. Process Pixels with Heuristics
         const pixelCounts = {};
         const maskCanvas = document.createElement('canvas');
         maskCanvas.width = width;
@@ -324,34 +317,15 @@
             const classId = segmentationMap[i];
             let labelName = ade20kLabels[classId] || 'unknown';
             
-            // SMART HEURISTIC for "Unknown/Background"
+            // SMART HEURISTIC: Fix featureless skies without over-scoring buildings
             if (labelName === 'unknown' || labelName === 'background' || labelName.includes('unrecognized')) {
                 const yRatio = Math.floor(i / width) / height;
-                
                 if (yRatio < 0.40) {
-                    // Only top 40% is rescued as Sky. 
-                    // This prevents the AI from calling a building on the horizon "Sky".
                     labelName = 'sky (heuristic)'; 
                 } else {
-                    // If it's unknown in the bottom 60%, it's likely a man-made surface 
-                    // (concrete, grey wall, or road) and should be Weight 1 for BEAM safety.
                     labelName = 'unspecified man-made/unknown';
                 }
             }
-            
-            pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
-            const weight = determineWeight(labelName);
-            const dataIndex = i * 4;
-        
-            // Apply Mask Colors
-            if (dataIndex + 3 < imageData.data.length) {
-                if (weight === 5) { imageData.data.set([39, 174, 96, 160], dataIndex); }      // Green (Nature)
-                else if (weight === 4) { imageData.data.set([41, 128, 185, 160], dataIndex); } // Blue (Sky)
-                else if (weight === 3) { imageData.data.set([142, 68, 173, 160], dataIndex); } // Purple (Indoor)
-                else if (weight === 2) { imageData.data.set([243, 156, 18, 160], dataIndex); } // Orange (Visual)
-                else { imageData.data.set([0, 0, 0, 0], dataIndex); }                          // Transparent (Man-made)
-            }
-        }
             
             pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
             const weight = determineWeight(labelName);
@@ -367,7 +341,7 @@
         }
         maskCtx.putImageData(imageData, 0, 0);
 
-        // 4. Calculate Final Score
+        // 4. Calculate Final Score & Build Table
         let totalWeightedPoints = 0;
         let tableHTML = `<table><thead><tr><th>Category / Label</th><th>Pixels Found</th><th>Weight</th></tr></thead><tbody>`;
         
@@ -385,21 +359,20 @@
             </tr>`;
         });
         tableHTML += `</tbody></table>`;
+        
         const finalScore = (totalWeightedPoints / segmentationMap.length).toFixed(3);
 
-        // 5. Build the UI Card
+        // 5. Build UI Card
         const card = document.createElement('div');
         card.className = 'result-card';
-        
-        // Export the mask as a data URL so it displays safely with CSS responsive sizing
         const maskDataUrl = maskCanvas.toDataURL();
 
         card.innerHTML = `
             <h3>${filename}</h3>
             <div class="score-box">Weighted Score: <strong>${finalScore} / 5.00</strong></div>
             <div class="image-wrapper">
-                <img src="${imgElement.src}" alt="Original Image">
-                <img src="${maskDataUrl}" alt="AI Mask" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0.6; pointer-events:none;">
+                <img src="${imgElement.src}">
+                <img src="${maskDataUrl}" style="position: absolute; top:0; left:0; width:100%; height:100%; opacity:0.6; pointer-events:none;">
             </div>
             ${tableHTML}
         `;
