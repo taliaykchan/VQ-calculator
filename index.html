@@ -305,41 +305,56 @@
         const prediction = await aiModel.segment(tempCanvas);
         const { segmentationMap, height, width } = prediction;
 
-        // 3. Process Pixels with Heuristics
-        const pixelCounts = {};
-        const maskCanvas = document.createElement('canvas');
-        maskCanvas.width = width;
-        maskCanvas.height = height;
-        const maskCtx = maskCanvas.getContext('2d');
-        const imageData = maskCtx.createImageData(width, height);
+        // 3. Process Pixels with "Color Rescue" Heuristics
+                const pixelCounts = {};
+                const maskCanvas = document.createElement('canvas');
+                maskCanvas.width = width;
+                maskCanvas.height = height;
+                const maskCtx = maskCanvas.getContext('2d');
+                const imageData = maskCtx.createImageData(width, height);
+                
+                // Grab the original colors of the photo so we can check them
+                const originalPixels = tempCtx.getImageData(0, 0, width, height).data;
+                
+                for (let i = 0; i < segmentationMap.length; i++) {
+                    const classId = segmentationMap[i];
+                    let labelName = ade20kLabels[classId] || 'unknown';
+                    const dataIndex = i * 4;
+                    
+                    // SMART HEURISTIC: Fix AI failures using position AND color
+                    if (labelName === 'unknown' || labelName === 'background' || labelName.includes('unrecognized')) {
+                        const r = originalPixels[dataIndex];
+                        const g = originalPixels[dataIndex + 1];
+                        const b = originalPixels[dataIndex + 2];
+                        const yRatio = Math.floor(i / width) / height;
+                        
+                        // Color Rescue: If the pixel has more Green than Red or Blue, it's vegetation
+                        if (g > r && g > b) {
+                            labelName = 'plant (color heuristic)'; // Maps to Weight 5
+                        } 
+                        // Position Rescue: If it's in the top 35%, it's almost certainly overcast Sky
+                        else if (yRatio < 0.35) {
+                            labelName = 'sky (heuristic)'; // Maps to Weight 4
+                        } 
+                        // Otherwise, play it safe for BEAM Plus and assume it's Man-made
+                        else {
+                            labelName = 'unspecified man-made/unknown'; // Maps to Weight 1
+                        }
+                    }
+                    
+                    pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
+                    const weight = determineWeight(labelName);
         
-        for (let i = 0; i < segmentationMap.length; i++) {
-            const classId = segmentationMap[i];
-            let labelName = ade20kLabels[classId] || 'unknown';
-            
-            // SMART HEURISTIC: Fix featureless skies without over-scoring buildings
-            if (labelName === 'unknown' || labelName === 'background' || labelName.includes('unrecognized')) {
-                const yRatio = Math.floor(i / width) / height;
-                if (yRatio < 0.40) {
-                    labelName = 'sky (heuristic)'; 
-                } else {
-                    labelName = 'unspecified man-made/unknown';
+                    // Draw the visual mask
+                    if (dataIndex + 3 < imageData.data.length) {
+                        if (weight === 5) { imageData.data.set([39, 174, 96, 160], dataIndex); }      // Green (Nature)
+                        else if (weight === 4) { imageData.data.set([41, 128, 185, 160], dataIndex); } // Blue (Sky)
+                        else if (weight === 3) { imageData.data.set([142, 68, 173, 160], dataIndex); } // Purple (Indoor)
+                        else if (weight === 2) { imageData.data.set([243, 156, 18, 160], dataIndex); } // Orange (Visual)
+                        else { imageData.data.set([0, 0, 0, 0], dataIndex); }                          // Transparent (Man-made)
+                    }
                 }
-            }
-            
-            pixelCounts[labelName] = (pixelCounts[labelName] || 0) + 1;
-            const weight = determineWeight(labelName);
-            const dataIndex = i * 4;
-
-            if (dataIndex + 3 < imageData.data.length) {
-                if (weight === 5) { imageData.data.set([39, 174, 96, 160], dataIndex); }      
-                else if (weight === 4) { imageData.data.set([41, 128, 185, 160], dataIndex); } 
-                else if (weight === 3) { imageData.data.set([142, 68, 173, 160], dataIndex); } 
-                else if (weight === 2) { imageData.data.set([243, 156, 18, 160], dataIndex); } 
-                else { imageData.data.set([0, 0, 0, 0], dataIndex); }                          
-            }
-        }
-        maskCtx.putImageData(imageData, 0, 0);
+                maskCtx.putImageData(imageData, 0, 0);
 
         // 4. Calculate Final Score & Build Table
         let totalWeightedPoints = 0;
