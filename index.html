@@ -3,262 +3,931 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BEAM Plus Visual Quality Calculator (Pro)</title>
+    <title>BEAM Plus Visual Quality Calculator</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); max-width: 1000px; width: 100%; text-align: center; }
+        :root {
+            --primary: #059669;
+            --primary-dark: #047857;
+            --primary-light: #d1fae5;
+            --slate-900: #0f172a;
+            --slate-800: #1e293b;
+            --slate-700: #334155;
+            --slate-600: #475569;
+            --slate-400: #94a3b8;
+            --slate-300: #cbd5e1;
+            --slate-200: #e2e8f0;
+            --slate-100: #f1f5f9;
+            --slate-50: #f8fafc;
+            --white: #ffffff;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --radius-sm: 6px;
+            --radius: 8px;
+            --radius-lg: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--slate-50); color: var(--slate-800); line-height: 1.5; padding: 0; }
+
+        .app-header { background: var(--white); border-bottom: 1px solid var(--slate-200); padding: 1rem 0; margin-bottom: 1rem; }
+        .header-content { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; }
         
-        /* Drag & Drop */
-        #drop-zone { border: 3px dashed #27ae60; border-radius: 10px; padding: 50px; background: #e9f7ef; color: #27ae60; cursor: pointer; margin-bottom: 20px; font-weight: bold; transition: all 0.2s; }
-        #drop-zone:hover, #drop-zone.dragover { background: #d4efdf; border-color: #2ecc71; }
+        .brand-text h1 { font-size: 1.25rem; font-weight: 700; color: var(--slate-900); }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 2rem; }
+        .status-container, .file-list, .summary-section { background: var(--white); border-radius: var(--radius-lg); padding: 1rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm); border: 1px solid var(--slate-200); }
         
-        /* Progress & Status */
-        #status-box { margin: 20px 0; padding: 15px; border-radius: 8px; background: #eee; font-size: 14px; position: relative; }
-        #progress-container { width: 100%; background: #ddd; border-radius: 5px; height: 10px; margin-top: 10px; display: none; overflow: hidden; }
-        #progress-bar { width: 0%; height: 100%; background: #27ae60; transition: width 0.1s linear; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius-sm); font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s; border: none; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: var(--slate-100); color: var(--slate-700); border: 1px solid var(--slate-200); }
+        .btn-secondary:hover { background: var(--slate-200); }
+        .btn-small { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
         
-        /* Results Layout */
-        .result-card { background: white; border: 1px solid #ddd; border-radius: 10px; padding: 20px; margin-top: 20px; text-align: left; }
-        .score-display { font-size: 28px; color: #27ae60; font-weight: bold; margin: 10px 0; border-bottom: 2px solid #f4f7f6; padding-bottom: 10px; }
+        .btn-active-summary { background: #fbbf24; color: #78350f; border-color: #f59e0b; cursor: default; }
+        .btn-active-summary:hover { background: #fbbf24; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+
+        .status-container { background: var(--slate-800); color: var(--white); display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
+        .status-info { display: flex; align-items: center; gap: 0.75rem; flex: 1; }
+        .status-indicator { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .status-text { font-size: 0.875rem; font-weight: 500; }
         
-        /* Side-by-side comparison */
-        .comparison-container { display: flex; flex-direction: row; gap: 20px; margin-top: 15px; width: 100%; }
-        .comparison-half { flex: 1; display: flex; flex-direction: column; align-items: center; }
-        .comparison-half span { margin-bottom: 8px; font-weight: 600; color: #555; font-size: 14px; }
-        .comparison-half img, .comparison-half canvas { width: 100%; max-width: 450px; border-radius: 8px; border: 1px solid #ccc; object-fit: contain; }
+        .progress-wrapper { flex: 1; max-width: 400px; display: none; }
+        .progress-wrapper.active { display: block; }
+        .progress-bar-bg { width: 100%; height: 6px; background: rgba(255, 255, 255, 0.2); border-radius: 3px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #34d399 0%, var(--primary) 100%); width: 0%; transition: width 0.3s ease; }
+
+        #drop-zone { background: linear-gradient(135deg, var(--primary-light) 0%, #ecfdf5 100%); border: 2px dashed var(--primary); border-radius: var(--radius-lg); padding: 2.5rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.3s ease; margin-bottom: 1.5rem; }
+        #drop-zone:hover { transform: translateY(-1px); border-color: var(--primary-dark); }
+        .upload-icon { font-size: 2rem; margin-bottom: 0.5rem; color: var(--primary); transition: all 0.3s ease; }
+        .drop-title { font-size: 1.125rem; font-weight: 600; color: var(--slate-800); margin-bottom: 0.25rem; transition: all 0.3s ease; }
+        .drop-subtitle { font-size: 0.875rem; color: var(--slate-600); transition: all 0.3s ease; }
+
+        #drop-zone.compact { padding: 1rem; display: flex; align-items: center; justify-content: center; gap: 1rem; border-style: solid; background: var(--white); }
+        #drop-zone.compact .upload-icon { font-size: 1.25rem; margin-bottom: 0; }
+        #drop-zone.compact .drop-title { font-size: 1rem; margin-bottom: 0; }
+        #drop-zone.compact .drop-subtitle { display: none; }
+
+        .file-list { display: none; margin-bottom: 1.5rem; }
+        .file-list.active { display: block; }
+        .file-list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--slate-200); }
+        .file-items { display: flex; flex-direction: column; gap: 0.5rem; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; background: var(--slate-50); border-radius: var(--radius-sm); border: 1px solid var(--slate-200); font-size: 0.875rem; }
+        .file-remove { color: var(--slate-400); cursor: pointer; font-weight: bold; }
+        .file-remove:hover { color: #dc2626; }
+
+        .summary-section { display: none; }
+        .summary-section.active { display: block; }
+        .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .average-score { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; border-radius: var(--radius-sm); }
+        .average-label { font-size: 0.75rem; font-weight: 500; text-transform: uppercase; }
+        .average-value { font-size: 1.25rem; font-weight: 700; }
         
-        /* Table */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
-        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f9f9f9; }
-        .color-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
-        .weight-5 { color: #27ae60; font-weight: bold; }
-        .weight-4 { color: #2980b9; font-weight: bold; }
-        .weight-1 { color: #c0392b; }
+        .global-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; text-align: left; }
+        .global-table th { padding: 0.75rem; background: var(--slate-50); border-bottom: 1px solid var(--slate-200); font-size: 0.75rem; text-transform: uppercase; color: var(--slate-600); }
+        .global-table td { padding: 0.75rem; border-bottom: 1px solid var(--slate-100); }
+        .score-cell { font-family: monospace; font-weight: 700; color: var(--primary); font-size: 1rem; }
+
+        #results { display: flex; flex-direction: column; gap: 1.5rem; }
+        .result-card { background: var(--white); border-radius: var(--radius-lg); border: 1px solid var(--slate-200); overflow: hidden; box-shadow: var(--shadow-sm); }
+        .card-header { background: var(--slate-50); padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--slate-200); display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+        .file-info { display: flex; align-items: center; gap: 0.5rem; }
+        .file-info h3 { font-size: 1rem; font-weight: 600; color: var(--slate-900); margin: 0; }
+        
+        .collapse-btn { background: none; border: none; cursor: pointer; color: var(--slate-500); padding: 0.25rem; display: flex; align-items: center; justify-content: center; }
+        .collapse-btn svg { transition: transform 0.3s ease; }
+        .collapse-btn.collapsed svg { transform: rotate(-90deg); }
+
+        .header-score { display: flex; align-items: center; gap: 0.5rem; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 0.35rem 0.85rem; border-radius: var(--radius-sm); }
+        .header-score .score-value { font-size: 1.15rem; font-weight: 700; line-height: 1; }
+
+        .card-content { display: block; }
+        .card-content.collapsed { display: none; }
+
+        .comparison-container { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--slate-200); }
+        @media (max-width: 900px) { .comparison-container { grid-template-columns: 1fr; } }
+        .comparison-half { padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; border-right: 1px solid var(--slate-200); }
+        .comparison-half:last-child { border-right: none; }
+        .comparison-label { font-size: 0.75rem; font-weight: 700; color: var(--slate-500); text-transform: uppercase; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+        
+        .image-wrapper { position: relative; border-radius: var(--radius-sm); overflow: hidden; background: var(--slate-100); aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; }
+        .image-wrapper img, .image-wrapper canvas { width: 100%; height: 100%; object-fit: contain; }
+
+        .lens-btn { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.9); border: 1px solid var(--slate-300); border-radius: var(--radius-sm); padding: 0.4rem; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); transition: all 0.2s; }
+        .lens-btn:hover { background: white; transform: scale(1.05); }
+
+        .data-section { padding: 1rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+        .info-text { font-size: 0.875rem; color: var(--slate-600); background: var(--slate-50); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--slate-200); margin-bottom: 0.5rem; }
+
+        #canvas-tooltip { position: absolute; background: rgba(15, 23, 42, 0.95); color: white; padding: 0.6rem 0.85rem; border-radius: 6px; font-size: 0.8rem; pointer-events: none; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); line-height: 1.4; border: 1px solid rgba(255,255,255,0.1); }
+
+        /* Modal Styles */
+        .zoom-modal { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.9); z-index: 2000; align-items: center; justify-content: center; flex-direction: column; }
+        .zoom-modal.active { display: flex; }
+        .zoom-header { width: 100%; display: flex; justify-content: space-between; padding: 1rem 2rem; color: white; background: rgba(0,0,0,0.5); }
+        .close-modal-btn { background: none; border: none; color: white; font-size: 2rem; cursor: pointer; line-height: 1; }
+        .zoom-container { flex: 1; width: 100%; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; cursor: grab; }
+        .zoom-container:active { cursor: grabbing; }
+        #zoom-canvas { transition: transform 0.1s ease-out; transform-origin: 0 0; }
+        
+        .dropdown-container { display: none; position: fixed; z-index: 2100; background: white; padding: 0.75rem; border-radius: var(--radius-sm); box-shadow: var(--shadow-md); border: 1px solid var(--slate-200); min-width: 200px; }
+        .dropdown-container select { width: 100%; margin-bottom: 0.75rem; padding: 0.4rem; }
+        .dropdown-actions { display: flex; flex-direction: column; gap: 0.5rem; }
+        .dropdown-row { display: flex; gap: 0.5rem; justify-content: space-between; }
+
+        .edit-toolbar { display: none; position: absolute; top: 80px; left: 50%; transform: translateX(-50%); background: white; padding: 0.5rem 1rem; border-radius: 30px; box-shadow: var(--shadow-md); z-index: 2100; align-items: center; gap: 1rem; font-size: 0.875rem; font-weight: 600; color: var(--slate-800); }
+        .edit-toolbar.active { display: flex; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>BEAM Plus Visual Quality Calculator</h1>
-    <p>Using SegFormer Transformer AI for High-Precision Nature Detection</p>
+    <header class="app-header">
+        <div class="header-content">
+            <div class="brand-text"><h1>BEAM Plus Visual Quality Calculator</h1></div>
+        </div>
+    </header>
 
-    <div id="status-box">
-        <span id="status-text">Initializing AI Engine (Transformers.js)...</span>
-        <div id="progress-container"><div id="progress-bar"></div></div>
+    <main class="container">
+        <div class="status-container">
+            <div class="status-info">
+                <div class="status-indicator" id="status-dot"></div>
+                <span class="status-text" id="status-text">Initializing AI Engine (Balanced Mode)...</span>
+            </div>
+            <div class="progress-wrapper" id="progress-container">
+                <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-bar"></div></div>
+            </div>
+        </div>
+
+        <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+            <input type="file" id="file-input" multiple hidden accept="image/*">
+            <div class="upload-icon">+</div>
+            <div class="drop-title">Drop images here or click to browse</div>
+            <div class="drop-subtitle">Upload multiple photos for BEAM Plus VQS assessment</div>
+        </div>
+
+        <div class="file-list" id="file-list">
+            <div class="file-list-header">
+                <span style="font-weight: 600;">Files Ready for Analysis</span>
+                <button class="btn btn-primary btn-small" id="analyse-btn" disabled>Analyse Selected</button>
+            </div>
+            <div class="file-items" id="file-items"></div>
+        </div>
+
+        <div class="summary-section" id="summary-section">
+            <div class="summary-header">
+                <h2 style="font-size: 1.125rem; font-weight: 700;">Analysis Summary</h2>
+                <div class="average-score">
+                    <span class="average-label">Average VQS for Viewpoint</span>
+                    <span class="average-value" id="average-score">0.000</span>
+                </div>
+            </div>
+            <table class="global-table">
+                <thead><tr><th>Filename</th><th>VQS for Frame</th></tr></thead>
+                <tbody id="summary-tbody"></tbody>
+            </table>
+        </div>
+
+        <div id="results"></div>
+    </main>
+
+    <div id="canvas-tooltip"></div>
+
+    <div id="zoom-modal" class="zoom-modal">
+        <div class="zoom-header">
+            <div>
+                <h3 id="modal-title" style="margin: 0; font-size: 1.25rem;">Detailed View</h3>
+                <p id="modal-subtitle" style="margin: 0; font-size: 0.875rem; color: var(--slate-300);">Scroll to zoom, click and drag to pan. Click a region to select and modify.</p>
+            </div>
+            <button class="close-modal-btn" id="close-modal">&times;</button>
+        </div>
+        
+        <div class="edit-toolbar" id="edit-toolbar">
+            <span style="color: #ef4444;"><span style="display:inline-block; width:8px; height:8px; background:#ef4444; border-radius:50%; margin-right:6px;"></span>Split Tool Mode</span>
+            <span style="color: var(--slate-400); font-weight: 400; border-left: 1px solid var(--slate-200); padding-left: 1rem;">Click and drag a line across the selected region to split it into two independent blocks.</span>
+            <div style="display: flex; gap: 0.5rem; margin-left: 1rem;">
+                <button class="btn btn-secondary btn-small" id="cancel-split">Cancel Split</button>
+            </div>
+        </div>
+
+        <div class="zoom-container" id="zoom-container">
+            <canvas id="zoom-canvas"></canvas>
+        </div>
     </div>
 
-    <div id="drop-zone" onclick="document.getElementById('file-input').click()">
-        Drag & Drop Scenery Photos or Click to Browse
-        <input type="file" id="file-input" multiple hidden accept="image/*">
+    <div class="dropdown-container" id="weight-dropdown-container">
+        <div style="font-size: 0.75rem; font-weight: bold; margin-bottom: 0.25rem; color: var(--slate-500);" id="dropdown-label">Category Label</div>
+        <select id="weight-select">
+            <option value="5">Weight 5 (Natural terrain, waterfront)</option>
+            <option value="4">Weight 4 (Outdoor planting, sky)</option>
+            <option value="3">Weight 3 (Indoor planting)</option>
+            <option value="2">Weight 2 (Biomorphic forms)</option>
+            <option value="1">Weight 1 (Urban/ Hardscape/ Unclassified)</option>
+        </select>
+        <div class="dropdown-actions">
+            <button class="btn btn-secondary btn-small" id="enter-split-mode" style="width: 100%;">Split Region</button>
+            <div class="dropdown-row">
+                <button class="btn btn-secondary btn-small" id="cancel-weight" style="flex: 1;">Cancel</button>
+                <button class="btn btn-primary btn-small" id="apply-weight" style="flex: 1;">Apply</button>
+            </div>
+        </div>
     </div>
 
-    <div id="results"></div>
-</div>
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
+        env.allowLocalModels = false;
 
-<script type="module">
-    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
-    env.allowLocalModels = false;
+        const AI_MODEL = 'Xenova/segformer-b2-finetuned-ade-512-512';
+        let segmenterInstance = null;
+        let pendingFiles = [];
+        
+        const runsDb = {}; 
+        const activeRuns = {}; 
 
-    let segmenter;
-    const statusText = document.getElementById('status-text');
-    const statusBox = document.getElementById('status-box');
-    const progressContainer = document.getElementById('progress-container');
-    const progressBar = document.getElementById('progress-bar');
-    const dropZone = document.getElementById('drop-zone');
+        const weightColors = {
+            5: [16, 185, 129],  
+            4: [59, 130, 246],  
+            3: [245, 158, 11],  
+            2: [249, 115, 22],  
+            1: [148, 163, 184]  
+        };
+        
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+        const progressBar = document.getElementById('progress-bar');
+        const progressContainer = document.getElementById('progress-container');
+        const fileList = document.getElementById('file-list');
+        const fileItems = document.getElementById('file-items');
+        const analyseBtn = document.getElementById('analyse-btn');
+        const summarySection = document.getElementById('summary-section');
+        const summaryTbody = document.getElementById('summary-tbody');
+        const averageScoreEl = document.getElementById('average-score');
 
-    function getWeight(label) {
-        const l = label.toLowerCase();
-        if (l.match(/tree|grass|earth|mountain|water|sea|river|lake|flower|animal|waterfall|field|land|hill|sand|rock|plant|palm|forest/)) return 5;
-        if (l.match(/sky/)) return 4;
-        if (l.match(/pot|vase/)) return 3;
-        if (l.match(/painting|poster|screen|television/)) return 2;
-        return 1; 
-    }
+        // Modal & Selection Variables
+        let activeModalFileId = null;
+        let activeModalRunId = null;
+        let activeModalViewMode = 'weighted';
+        let selectedInstanceId = null;
+        let scale = 1;
+        let panX = 0, panY = 0;
+        let isPanning = false;
+        let startX, startY;
+        
+        // Split Mode Variables
+        let isSplitMode = false;
+        let splitLine = null;
 
-    // Generate consistent colors based on label name
-    function stringToColour(str) {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        const zoomModal = document.getElementById('zoom-modal');
+        const zoomContainer = document.getElementById('zoom-container');
+        const zoomCanvas = document.getElementById('zoom-canvas');
+        const dropdownContainer = document.getElementById('weight-dropdown-container');
+        const weightSelect = document.getElementById('weight-select');
+        const editToolbar = document.getElementById('edit-toolbar');
+
+        function getWeight(label) {
+            const l = label.toLowerCase();
+            if (l.match(/tree|grass|earth|mountain|water|sea|river|lake|flower|animal|waterfall|field|land|hill|sand|rock|plant|palm|forest/)) return 5;
+            if (l.match(/sky/)) return 4;
+            return 1; 
         }
-        let colour = '#';
-        for (let i = 0; i < 3; i++) {
-            let value = (hash >> (i * 8)) & 0xFF;
-            colour += ('00' + value.toString(16)).substr(-2);
-        }
-        return colour;
-    }
 
-    // Convert HEX to RGB for Canvas manipulation
-    function hexToRgb(hex) {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? [
-            parseInt(result[1], 16),
-            parseInt(result[2], 16),
-            parseInt(result[3], 16)
-        ] : [0, 0, 0];
-    }
-
-    async function init() {
-        try {
-            statusText.innerText = "Downloading AI Brain (~15MB)... Please wait.";
-            progressContainer.style.display = 'block';
-            
-            segmenter = await pipeline('image-segmentation', 'Xenova/segformer-b0-finetuned-ade-512-512', {
+        async function initEngine() {
+            progressContainer.classList.add('active');
+            segmenterInstance = await pipeline('image-segmentation', AI_MODEL, {
                 progress_callback: (x) => {
-                    if (x.status === 'progress') {
-                        progressBar.style.width = `${x.progress}%`;
+                    if (x.status === 'progress') progressBar.style.width = `${x.progress}%`;
+                }
+            });
+            progressContainer.classList.remove('active');
+            progressBar.style.width = '0%';
+            statusText.innerText = "Engine Ready — Select files to analyse";
+            statusDot.style.background = '#34d399';
+        }
+        initEngine();
+
+        function updateDropzoneSize() {
+            const total = pendingFiles.length + Object.keys(runsDb).length;
+            const dropZone = document.getElementById('drop-zone');
+            total >= 3 ? dropZone.classList.add('compact') : dropZone.classList.remove('compact');
+        }
+
+        function updateFileList() {
+            updateDropzoneSize();
+            fileItems.innerHTML = '';
+            pendingFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `<span class="file-name">${file.name}</span><span class="file-remove" data-index="${index}">&times;</span>`;
+                fileItems.appendChild(item);
+            });
+            fileList.classList.toggle('active', pendingFiles.length > 0);
+            analyseBtn.disabled = pendingFiles.length === 0;
+
+            document.querySelectorAll('.file-remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    pendingFiles.splice(parseInt(e.target.dataset.index), 1);
+                    updateFileList();
+                });
+            });
+        }
+
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            pendingFiles = [...pendingFiles, ...Array.from(e.target.files)];
+            updateFileList();
+            e.target.value = '';
+        });
+
+        function resizeImageForAI(file, maxDim) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (width > maxDim || height > maxDim) {
+                        if (width > height) { height *= maxDim / width; width = maxDim; }
+                        else { width *= maxDim / height; height = maxDim; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.9));
+                };
+            });
+        }
+
+        function stringToColour(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            let c = '#';
+            for (let i = 0; i < 3; i++) c += ('00' + ((hash >> (i * 8)) & 0xFF).toString(16)).substr(-2);
+            return c;
+        }
+
+        function hexToRgb(hex) {
+            const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return r ? [parseInt(r[1], 16), parseInt(r[2], 16), parseInt(r[3], 16)] : [0, 0, 0];
+        }
+
+        function extractInstances(maskObj, width, height, globalAssignedPixels, rawColor) {
+            const instances = [];
+            const visited = new Uint8Array(width * height);
+            const data = maskObj.mask.data;
+            const label = maskObj.label;
+
+            for (let i = 0; i < width * height; i++) {
+                if (data[i] > 0 && visited[i] === 0) {
+                    const instanceMask = new Uint8Array(width * height);
+                    let pCount = 0;
+                    const queue = [i];
+                    visited[i] = 1;
+
+                    let qHead = 0;
+                    while (qHead < queue.length) {
+                        const currIdx = queue[qHead++];
+                        instanceMask[currIdx] = 255;
+                        pCount++;
+
+                        const cy = Math.floor(currIdx / width);
+                        const cx = currIdx % width;
+
+                        if (cx > 0) { let n = currIdx - 1; if (data[n] > 0 && visited[n] === 0) { visited[n] = 1; queue.push(n); } }
+                        if (cx < width - 1) { let n = currIdx + 1; if (data[n] > 0 && visited[n] === 0) { visited[n] = 1; queue.push(n); } }
+                        if (cy > 0) { let n = currIdx - width; if (data[n] > 0 && visited[n] === 0) { visited[n] = 1; queue.push(n); } }
+                        if (cy < height - 1) { let n = currIdx + width; if (data[n] > 0 && visited[n] === 0) { visited[n] = 1; queue.push(n); } }
+                    }
+
+                    // Only commit these pixels to the global map if the instance is large enough to keep
+                    if (pCount > 20) { 
+                        for(let k = 0; k < queue.length; k++) {
+                            globalAssignedPixels[queue[k]] = 1;
+                        }
+                        
+                        instances.push({
+                            id: `inst-${Math.random().toString(36).substr(2, 9)}`,
+                            label: label,
+                            maskData: instanceMask,
+                            pCount: pCount,
+                            weight: getWeight(label),
+                            rawColor: rawColor
+                        });
+                    }
+                }
+            }
+            return instances;
+        }
+
+        function updateSummary() {
+            const activeKeys = Object.keys(activeRuns);
+            if (activeKeys.length === 0) return summarySection.classList.remove('active');
+            
+            summarySection.classList.add('active');
+            summaryTbody.innerHTML = '';
+            let totalScore = 0;
+
+            activeKeys.forEach(fileId => {
+                const runId = activeRuns[fileId];
+                const runData = runsDb[fileId][runId];
+                totalScore += parseFloat(runData.score);
+                summaryTbody.insertAdjacentHTML('beforeend', `<tr><td>${runData.filename}</td><td class="score-cell">${runData.score}</td></tr>`);
+            });
+            averageScoreEl.textContent = (totalScore / activeKeys.length).toFixed(3);
+        }
+
+        function getCategorySummaryTableHTML(run) {
+            const totalImagePixels = run.width * run.height;
+            return `
+                <table class="global-table">
+                    <thead><tr><th>Category Assignment</th><th>Total Analyzed Pixels</th></tr></thead>
+                    <tbody>
+                        <tr><td>Assigned Weight 5</td><td class="score-cell">${(run.catCounts[5] || 0).toLocaleString()}</td></tr>
+                        <tr><td>Assigned Weight 4</td><td class="score-cell">${(run.catCounts[4] || 0).toLocaleString()}</td></tr>
+                        <tr><td>Assigned Weight 3</td><td class="score-cell">${(run.catCounts[3] || 0).toLocaleString()}</td></tr>
+                        <tr><td>Assigned Weight 2</td><td class="score-cell">${(run.catCounts[2] || 0).toLocaleString()}</td></tr>
+                        <tr><td>Assigned Weight 1</td><td class="score-cell">${(run.catCounts[1] || 0).toLocaleString()}</td></tr>
+                        <tr style="background-color: var(--slate-50);"><td style="font-weight: bold;">Total Scored Pixels</td><td class="score-cell" style="font-weight: bold;">${run.pixelSum.toLocaleString()}</td></tr>
+                        <tr style="background-color: var(--slate-100);"><td style="font-weight: bold;">Total Image Pixels</td><td class="score-cell" style="font-weight: bold;">${totalImagePixels.toLocaleString()}</td></tr>
+                    </tbody>
+                </table>`;
+        }
+
+        function drawCanvasState(run, canvas, highlightedInstanceId = null, viewMode = 'weighted') {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            canvas.width = run.width;
+            canvas.height = run.height;
+            
+            ctx.clearRect(0, 0, run.width, run.height);
+            ctx.drawImage(run.imgObj, 0, 0, run.width, run.height);
+            
+            const imgData = ctx.createImageData(run.width, run.height);
+            
+            run.instances.forEach(inst => {
+                const isSelected = inst.id === highlightedInstanceId;
+                let rgb;
+                
+                if (viewMode === 'raw') {
+                    rgb = inst.rawColor;
+                } else {
+                    rgb = weightColors[inst.weight];
+                }
+                
+                if (!rgb) return;
+                
+                const opacity = isSelected ? 200 : 140; 
+                
+                for (let i = 0; i < inst.maskData.length; i++) {
+                    if (inst.maskData[i] > 0) {
+                        const p = i * 4;
+                        if (isSelected) {
+                            imgData.data[p] = Math.min(255, rgb[0] + 40);
+                            imgData.data[p+1] = Math.min(255, rgb[1] + 40);
+                            imgData.data[p+2] = Math.min(255, rgb[2] + 40);
+                        } else {
+                            imgData.data[p] = rgb[0];
+                            imgData.data[p+1] = rgb[1];
+                            imgData.data[p+2] = rgb[2];
+                        }
+                        imgData.data[p+3] = opacity; 
                     }
                 }
             });
             
-            statusText.innerText = "AI Ready. Upload or drop images to begin analysis.";
-            statusBox.style.background = "#d4efdf";
-            progressContainer.style.display = 'none';
-        } catch (e) {
-            statusText.innerText = "Error: Could not load AI model.";
-            console.error(e);
+            const tempLayer = document.createElement('canvas');
+            tempLayer.width = run.width; tempLayer.height = run.height;
+            tempLayer.getContext('2d').putImageData(imgData, 0, 0);
+            ctx.drawImage(tempLayer, 0, 0);
+
+            // Draw Split Line
+            if (isSplitMode && splitLine) {
+                ctx.strokeStyle = '#ef4444'; 
+                ctx.lineWidth = 3 / scale; 
+                ctx.beginPath();
+                ctx.moveTo(splitLine.x1, splitLine.y1);
+                ctx.lineTo(splitLine.x2, splitLine.y2);
+                ctx.stroke();
+            }
         }
-    }
-    init();
 
-    // 1. Drag and Drop Implementation
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.classList.add('dragover');
-    });
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-    });
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            handleFiles(e.dataTransfer.files);
+        function updateRunWeight(fileId, runId, instanceId, newWeight) {
+            const run = runsDb[fileId][runId];
+            if (instanceId && newWeight !== null) {
+                const inst = run.instances.find(i => i.id === instanceId);
+                if (inst) inst.weight = newWeight;
+            }
+
+            let weightedSum = 0; let pixelSum = 0;
+            let catCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+            
+            run.instances.forEach(inst => {
+                const w = inst.weight;
+                const px = inst.pCount;
+                weightedSum += (px * w);
+                if (catCounts[w] !== undefined) catCounts[w] += px;
+                pixelSum += px; 
+            });
+            
+            run.score = pixelSum > 0 ? (weightedSum / pixelSum).toFixed(3) : "0.000";
+            run.pixelSum = pixelSum;
+            run.catCounts = catCounts;
+            
+            const scoreEl = document.getElementById(`score-val-${runId}`);
+            if (scoreEl) scoreEl.innerText = run.score;
+            
+            const catSummaryEl = document.getElementById(`cat-summary-${runId}`);
+            if (catSummaryEl) catSummaryEl.innerHTML = getCategorySummaryTableHTML(run);
+            
+            updateSummary();
+
+            const rawCanvas = document.getElementById(`raw-canvas-${runId}`);
+            if (rawCanvas) drawCanvasState(run, rawCanvas, null, 'raw');
+
+            const mainCanvas = document.getElementById(`overlay-${runId}`);
+            if (mainCanvas) drawCanvasState(run, mainCanvas, null, 'weighted');
+
+            if (activeModalFileId === fileId && activeModalRunId === runId) {
+                drawCanvasState(run, zoomCanvas, selectedInstanceId, activeModalViewMode);
+            }
         }
-    });
 
-    const fileInput = document.getElementById('file-input');
-    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-
-    // 3. Batch Image Processing
-    async function handleFiles(files) {
-        const resultsDiv = document.getElementById('results');
-        resultsDiv.innerHTML = ''; 
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            statusText.innerText = `Analyzing image ${i + 1} of ${files.length}: ${file.name}...`;
-            
-            // Artificial loading bar effect for inference time
-            progressContainer.style.display = 'block';
-            progressBar.style.transition = 'width 2s ease-out';
-            progressBar.style.width = '85%'; 
-
-            const url = URL.createObjectURL(file);
-            const output = await segmenter(url);
-            
-            progressBar.style.transition = 'width 0.2s ease-in';
-            progressBar.style.width = '100%';
-            
-            setTimeout(() => { progressBar.style.width = '0%'; }, 300);
-
-            processResults(file.name, url, output);
+        function getMousePos(e, canvas) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
         }
-        statusText.innerText = "Batch Analysis Complete.";
-        progressContainer.style.display = 'none';
-    }
 
-    function processResults(name, url, output) {
-        const resultsDiv = document.getElementById('results');
-        const card = document.createElement('div');
-        card.className = 'result-card';
+        // --- SPLIT TOOL LOGIC ---
+        function performSplit(fileId, runId, instId, line) {
+            // Validate length to ensure user didn't just mistakenly click
+            if (Math.hypot(line.x2 - line.x1, line.y2 - line.y1) < 5) return; 
 
-        // Set up the canvas for the 4. Side-by-Side Colour Masking
-        const canvas = document.createElement('canvas');
-        const width = output[0].mask.width;
-        const height = output[0].mask.height;
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        const imgData = ctx.createImageData(width, height);
+            const run = runsDb[fileId][runId];
+            const instIdx = run.instances.findIndex(i => i.id === instId);
+            if (instIdx === -1) return;
+            const inst = run.instances[instIdx];
 
-        const counts = {};
-        const labelColors = {};
+            const maskA = new Uint8Array(run.width * run.height);
+            const maskB = new Uint8Array(run.width * run.height);
+            let countA = 0, countB = 0;
 
-        // Process each mask layer
-        output.forEach(maskObj => {
-            const label = maskObj.label;
-            const colorHex = stringToColour(label);
-            const rgb = hexToRgb(colorHex);
-            labelColors[label] = colorHex;
-            
-            let pixelCount = 0;
-            
-            // Loop through the flat array to apply colors to the ImageData
-            for (let i = 0; i < maskObj.mask.data.length; i++) {
-                if (maskObj.mask.data[i] > 0) {
-                    pixelCount++;
-                    const ptr = i * 4;
-                    imgData.data[ptr] = rgb[0];       // R
-                    imgData.data[ptr+1] = rgb[1];     // G
-                    imgData.data[ptr+2] = rgb[2];     // B
-                    imgData.data[ptr+3] = 180;        // Alpha (transparency overlay)
+            for (let i = 0; i < inst.maskData.length; i++) {
+                if (inst.maskData[i] > 0) {
+                    const y = Math.floor(i / run.width);
+                    const x = i % run.width;
+                    
+                    const val = (x - line.x1) * (line.y2 - line.y1) - (y - line.y1) * (line.x2 - line.x1);
+                    if (val > 0) { 
+                        maskA[i] = 255; countA++; 
+                    } else { 
+                        maskB[i] = 255; countB++; 
+                    }
                 }
             }
-            counts[label] = (counts[label] || 0) + pixelCount;
+
+            if (countA > 0 && countB > 0) {
+                run.instances.splice(instIdx, 1);
+                run.instances.push({
+                    id: `inst-${Math.random().toString(36).substr(2, 9)}`,
+                    label: inst.label,
+                    maskData: maskA,
+                    pCount: countA,
+                    weight: inst.weight,
+                    rawColor: inst.rawColor
+                });
+                run.instances.push({
+                    id: `inst-${Math.random().toString(36).substr(2, 9)}`,
+                    label: inst.label,
+                    maskData: maskB,
+                    pCount: countB,
+                    weight: inst.weight,
+                    rawColor: inst.rawColor
+                });
+            }
+
+            selectedInstanceId = null;
+            updateRunWeight(fileId, runId, null, null);
+        }
+
+        // --- ZOOM MODAL LOGIC ---
+        window.openZoomModal = function(fileId, runId, viewMode = 'weighted') {
+            activeModalFileId = fileId; activeModalRunId = runId; activeModalViewMode = viewMode;
+            selectedInstanceId = null; isSplitMode = false; splitLine = null;
+            
+            const run = runsDb[fileId][runId];
+            document.getElementById('modal-title').innerText = `Detailed View: ${run.filename}`;
+            editToolbar.classList.remove('active');
+            
+            scale = 1; panX = 0; panY = 0;
+            updateTransform();
+            
+            drawCanvasState(run, zoomCanvas, null, activeModalViewMode);
+            zoomModal.classList.add('active');
+        }
+
+        document.getElementById('close-modal').addEventListener('click', () => {
+            zoomModal.classList.remove('active');
+            dropdownContainer.style.display = 'none';
+            isSplitMode = false; splitLine = null;
+            activeModalFileId = null; activeModalRunId = null; selectedInstanceId = null;
         });
 
-        // Draw the colored masks onto the canvas
-        ctx.putImageData(imgData, 0, 0);
+        function updateTransform() {
+            zoomCanvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        }
 
-        // Calculate Scores
-        let weightedSum = 0;
-        let pixelSum = 0;
-        let tableRows = '';
-
-        Object.keys(counts).forEach(label => {
-            const weight = getWeight(label);
-            const c = counts[label];
-            weightedSum += (c * weight);
-            pixelSum += c;
-
-            tableRows += `<tr>
-                <td><span class="color-swatch" style="background-color: ${labelColors[label]}"></span>${label}</td>
-                <td>${c.toLocaleString()}</td>
-                <td class="weight-${weight}">Weight ${weight}</td>
-            </tr>`;
+        zoomContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            scale *= (e.deltaY < 0 ? 1.1 : 0.9);
+            scale = Math.min(Math.max(0.2, scale), 10); 
+            dropdownContainer.style.display = 'none';
+            updateTransform();
         });
 
-        const finalScore = pixelSum > 0 ? (weightedSum / pixelSum).toFixed(3) : 0;
-
-        card.innerHTML = `
-            <h3>${name}</h3>
-            <div class="score-display">Final Weighted Score: ${finalScore} / 5.000</div>
+        zoomContainer.addEventListener('mousedown', (e) => {
+            if (e.target !== zoomCanvas && e.target !== zoomContainer) return;
             
-            <div class="comparison-container">
-                <div class="comparison-half">
-                    <span>Original Photo</span>
-                    <img src="${url}">
-                </div>
-                <div class="comparison-half">
-                    <span>AI Semantic Mask</span>
-                </div>
-            </div>
+            if (isSplitMode) {
+                const pos = getMousePos(e, zoomCanvas);
+                splitLine = { x1: pos.x, y1: pos.y, x2: pos.x, y2: pos.y };
+                return;
+            }
+
+            isPanning = true;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isSplitMode && splitLine) {
+                const pos = getMousePos(e, zoomCanvas);
+                splitLine.x2 = pos.x;
+                splitLine.y2 = pos.y;
+                drawCanvasState(runsDb[activeModalFileId][activeModalRunId], zoomCanvas, selectedInstanceId, activeModalViewMode);
+                return;
+            }
+
+            if (!isPanning) return;
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            updateTransform();
+        });
+
+        window.addEventListener('mouseup', () => { 
+            if (isSplitMode && splitLine) {
+                performSplit(activeModalFileId, activeModalRunId, selectedInstanceId, splitLine);
+                isSplitMode = false;
+                splitLine = null;
+                editToolbar.classList.remove('active');
+            }
+            isPanning = false; 
+        });
+
+        zoomCanvas.addEventListener('click', (e) => {
+            if(isSplitMode) return; 
+            const run = runsDb[activeModalFileId][activeModalRunId];
+            if (!run) return;
+
+            const pos = getMousePos(e, zoomCanvas);
+            const idx = Math.floor(pos.y) * run.width + Math.floor(pos.x);
             
-            <table>
-                <thead><tr><th>Detected Elements</th><th>Pixels Area</th><th>BEAM Weight</th></tr></thead>
-                <tbody>${tableRows}</tbody>
-            </table>
-        `;
+            let clickedInst = null;
+            for (let i = 0; i < run.instances.length; i++) {
+                if (run.instances[i].maskData[idx] > 0) { clickedInst = run.instances[i]; break; }
+            }
 
-        // Append the rendered canvas directly into the right half of the comparison
-        card.querySelector('.comparison-half:nth-child(2)').appendChild(canvas);
-        resultsDiv.appendChild(card);
-    }
-</script>
+            if (clickedInst) {
+                selectedInstanceId = clickedInst.id;
+                drawCanvasState(run, zoomCanvas, selectedInstanceId, activeModalViewMode);
+                dropdownContainer.style.display = 'block';
+                dropdownContainer.style.left = `${e.clientX + 10}px`;
+                dropdownContainer.style.top = `${e.clientY + 10}px`;
+                document.getElementById('dropdown-label').innerText = clickedInst.label.toUpperCase();
+                weightSelect.value = clickedInst.weight;
+            } else {
+                selectedInstanceId = null;
+                dropdownContainer.style.display = 'none';
+                drawCanvasState(run, zoomCanvas, null, activeModalViewMode);
+            }
+        });
 
+        document.getElementById('cancel-weight').addEventListener('click', () => {
+            dropdownContainer.style.display = 'none';
+            selectedInstanceId = null;
+            drawCanvasState(runsDb[activeModalFileId][activeModalRunId], zoomCanvas, null, activeModalViewMode);
+        });
+
+        document.getElementById('apply-weight').addEventListener('click', () => {
+            if (selectedInstanceId) {
+                updateRunWeight(activeModalFileId, activeModalRunId, selectedInstanceId, parseInt(weightSelect.value));
+                dropdownContainer.style.display = 'none';
+                selectedInstanceId = null;
+                drawCanvasState(runsDb[activeModalFileId][activeModalRunId], zoomCanvas, null, activeModalViewMode);
+            }
+        });
+
+        document.getElementById('enter-split-mode').addEventListener('click', () => {
+            dropdownContainer.style.display = 'none';
+            isSplitMode = true;
+            splitLine = null;
+            editToolbar.classList.add('active');
+        });
+
+        document.getElementById('cancel-split').addEventListener('click', () => {
+            isSplitMode = false;
+            splitLine = null;
+            editToolbar.classList.remove('active');
+            selectedInstanceId = null;
+            drawCanvasState(runsDb[activeModalFileId][activeModalRunId], zoomCanvas, null, activeModalViewMode);
+        });
+
+        window.downloadCanvas = function(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png'); link.click();
+        }
+
+        async function performAnalysis(file) {
+            const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            if (!runsDb[fileId]) runsDb[fileId] = {};
+            const runId = `run-${Date.now()}`;
+            
+            const safeUrl = await resizeImageForAI(file, 800);
+            const originalImg = new Image();
+            originalImg.src = safeUrl;
+            await new Promise(r => originalImg.onload = r);
+
+            const output = await segmenterInstance(safeUrl);
+            const { width, height } = output[0].mask;
+            
+            let allInstances = [];
+            let globalAssignedPixels = new Uint8Array(width * height);
+
+            // Step 1: Extract all assigned segment instances initially
+            output.forEach(maskObj => {
+                const label = maskObj.label;
+                const rgbRaw = hexToRgb(stringToColour(label));
+                allInstances.push(...extractInstances(maskObj, width, height, globalAssignedPixels, rgbRaw));
+            });
+
+            // Step 2: Gap filling (Group unclassified pixels with adjacent regions via BFS)
+            let queue = new Int32Array(width * height);
+            let qHead = 0, qTail = 0;
+            let pixelOwner = new Array(width * height).fill(null);
+
+            // Populate initial queue with edge pixels of already assigned blocks
+            allInstances.forEach(inst => {
+                for(let i=0; i < width*height; i++) {
+                    if (inst.maskData[i] > 0) {
+                        pixelOwner[i] = inst;
+                        queue[qTail++] = i;
+                    }
+                }
+            });
+
+            // Run BFS to spread assigned territories outward into empty gaps
+            while(qHead < qTail) {
+                let currIdx = queue[qHead++];
+                let owner = pixelOwner[currIdx];
+
+                let cy = Math.floor(currIdx / width);
+                let cx = currIdx % width;
+
+                // Check 4-way neighbors
+                if (cx > 0) { let n = currIdx - 1; if (globalAssignedPixels[n] === 0) { globalAssignedPixels[n] = 1; pixelOwner[n] = owner; owner.maskData[n] = 255; owner.pCount++; queue[qTail++] = n; } }
+                if (cx < width - 1) { let n = currIdx + 1; if (globalAssignedPixels[n] === 0) { globalAssignedPixels[n] = 1; pixelOwner[n] = owner; owner.maskData[n] = 255; owner.pCount++; queue[qTail++] = n; } }
+                if (cy > 0) { let n = currIdx - width; if (globalAssignedPixels[n] === 0) { globalAssignedPixels[n] = 1; pixelOwner[n] = owner; owner.maskData[n] = 255; owner.pCount++; queue[qTail++] = n; } }
+                if (cy < height - 1) { let n = currIdx + width; if (globalAssignedPixels[n] === 0) { globalAssignedPixels[n] = 1; pixelOwner[n] = owner; owner.maskData[n] = 255; owner.pCount++; queue[qTail++] = n; } }
+            }
+
+            runsDb[fileId][runId] = { filename: file.name, width: width, height: height, imgObj: originalImg, instances: allInstances };
+            activeRuns[fileId] = runId; 
+            
+            const canvasRaw = document.createElement('canvas');
+            canvasRaw.width = width; canvasRaw.height = height;
+            canvasRaw.id = `raw-canvas-${runId}`;
+
+            const canvasWeighted = document.createElement('canvas');
+            canvasWeighted.width = width; canvasWeighted.height = height;
+            canvasWeighted.id = `overlay-${runId}`;
+
+            createResultCard(file, canvasRaw, canvasWeighted, runId, fileId, safeUrl);
+            
+            // Generate visual canvas states
+            updateRunWeight(fileId, runId, null, null); 
+        }
+
+        function createResultCard(file, canvasRaw, canvasWeighted, runId, fileId, safeUrl) {
+            const resultsDiv = document.getElementById('results');
+            const card = document.createElement('div');
+            card.className = 'result-card';
+            card.id = `card-${fileId}`;
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <div class="file-info">
+                        <button class="collapse-btn" onclick="this.closest('.result-card').querySelector('.card-content').classList.toggle('collapsed'); this.classList.toggle('collapsed')" title="Toggle View">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </button>
+                        <h3>${file.name}</h3>
+                    </div>
+                    <div class="header-score">
+                        <span style="font-size: 0.75rem; text-transform: uppercase; opacity: 0.9;">VQS:</span>
+                        <span class="score-value" id="score-val-${runId}">0.000</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    <div class="tab-pane active" id="pane-${runId}">
+                        <div class="comparison-container">
+                            <div class="comparison-half">
+                                <div class="comparison-label">Original Input</div>
+                                <div class="image-wrapper"><img src="${safeUrl}" alt="Original"></div>
+                            </div>
+                            <div class="comparison-half">
+                                <div class="comparison-label">
+                                    AI Segmentation
+                                    <button class="btn btn-secondary btn-small" onclick="downloadCanvas('${canvasRaw.id}', '${file.name.split('.')[0]}_raw.png')" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;">Download</button>
+                                </div>
+                                <div class="image-wrapper mask-container" id="raw-${runId}">
+                                    <button class="lens-btn" onclick="openZoomModal('${fileId}', '${runId}', 'raw')" title="Open Detailed View">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="comparison-half">
+                                <div class="comparison-label">
+                                    Weight Overlay 
+                                    <button class="btn btn-secondary btn-small" onclick="downloadCanvas('${canvasWeighted.id}', '${file.name.split('.')[0]}_weight_overlay.png')" style="padding: 0.2rem 0.5rem; font-size: 0.7rem;">Download</button>
+                                </div>
+                                <div class="image-wrapper mask-container" id="weighted-${runId}">
+                                    <button class="lens-btn" onclick="openZoomModal('${fileId}', '${runId}', 'weighted')" title="Open Detailed View">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="data-section">
+                            <h3 style="font-size:1rem; margin-bottom: 0.25rem;">Analysis Data</h3>
+                            <div class="info-text">
+                                <strong>Interactive Edits:</strong> Click the magnifying glass icon on the overlays to enter detailed view. You can explicitly assign categories, or split a segment using the knife tool.
+                            </div>
+                            <div id="cat-summary-${runId}"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            resultsDiv.prepend(card);
+            card.querySelector(`#raw-${runId}`).appendChild(canvasRaw);
+            card.querySelector(`#weighted-${runId}`).appendChild(canvasWeighted);
+        }
+
+        document.getElementById('analyse-btn').addEventListener('click', async () => {
+            if (pendingFiles.length === 0) return;
+            analyseBtn.disabled = true;
+            
+            const totalFiles = pendingFiles.length;
+            
+            progressContainer.classList.add('active');
+            progressBar.style.width = '0%';
+            statusDot.style.background = '#fbbf24';
+            
+            for (let i = 0; i < totalFiles; i++) {
+                const currentFileNum = i + 1;
+                analyseBtn.textContent = `Analysing ${currentFileNum}/${totalFiles}...`;
+                statusText.innerText = `Analysing photo ${currentFileNum} of ${totalFiles}: ${pendingFiles[i].name}...`;
+                
+                await performAnalysis(pendingFiles[i]);
+                
+                progressBar.style.width = `${(currentFileNum / totalFiles) * 100}%`;
+            }
+            
+            pendingFiles = [];
+            updateFileList();
+            analyseBtn.textContent = 'Analyse Selected';
+            statusText.innerText = "All analyses complete — Ready for next batch";
+            statusDot.style.background = '#34d399';
+            
+            setTimeout(() => {
+                progressContainer.classList.remove('active');
+                progressBar.style.width = '0%';
+            }, 2000);
+        });
+        
+        const dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--primary-dark)'; });
+        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.style.borderColor = 'var(--primary)'; });
+        dropZone.addEventListener('drop', (e) => { 
+            e.preventDefault(); dropZone.style.borderColor = 'var(--primary)';
+            pendingFiles = [...pendingFiles, ...Array.from(e.dataTransfer.files)];
+            updateFileList();
+        });
+    </script>
 </body>
 </html>
