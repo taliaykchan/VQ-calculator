@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import torch
-import plotly.graph_objects as go
 from PIL import Image, ImageDraw
 from scipy.ndimage import distance_transform_edt, label as connected_components
 from streamlit_image_coordinates import streamlit_image_coordinates
@@ -30,6 +29,14 @@ st.markdown(
         background: #ffffff;
         box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
     }
+    .app-note {
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        border: 1px solid #dbe4ee;
+        background: #f8fafc;
+        color: #475569;
+        font-size: 0.95rem;
+    }
     .loading-banner {
         padding: 2rem;
         background-color: #e0f2fe;
@@ -39,25 +46,44 @@ st.markdown(
         color: #0369a1;
         margin-bottom: 2rem;
     }
-    /* Clean up default Streamlit table styling to look modern */
-    table {
-        border-collapse: collapse;
-        width: 100%;
-        color: #334155;
-    }
-    th {
-        background-color: #f1f5f9;
-        font-weight: 600;
-        color: #475569;
-    }
-    td, th {
-        border: 1px solid #e2e8f0;
-        padding: 8px 12px;
+    /* Hide default dataframe toolbar to replace with single custom download button */
+    [data-testid="stDataFrame"] [data-testid="stElementToolbar"] {
+        display: none !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
+# --- SECURITY MODULE ---
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    
+    # Set your desired password here
+    APP_PASSWORD = "aechk2026"
+
+    def password_entered():
+        if st.session_state["password"] == APP_PASSWORD:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # don't store password in session state
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.markdown("### 🔒 Security Check")
+        st.text_input("Please enter the password to access the tool:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.markdown("### 🔒 Security Check")
+        st.text_input("Please enter the password to access the tool:", type="password", on_change=password_entered, key="password")
+        st.error("Password incorrect")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()  # Do not continue running the app until password is correct
+# -----------------------
 
 MODEL_OPTIONS: dict[str, dict[str, Any]] = {
     "b2": {
@@ -77,20 +103,28 @@ SAM_MODEL_ID = "facebook/sam-vit-base"
 MAX_PHOTOS = 3
 MIN_INSTANCE_PIXELS = 20
 
-# W1 is Dark Grey, W2 is Light Pink
 WEIGHT_MAP = {
-    5: {"label": "External Nature (Trees, Water)", "color": (16, 185, 129)},
-    4: {"label": "External Nature (Sky, Sand)", "color": (59, 130, 246)},
-    3: {"label": "Internal Biophilia (Plants)", "color": (245, 158, 11)},
-    2: {"label": "Internal Art (Nature Photos / Drawings)", "color": (255, 182, 193)},
+    5: {"label": "Natural terrain; waterfront", "color": (16, 185, 129)},
+    4: {"label": "Outdoor planting; Sky", "color": (59, 130, 246)},
+    3: {"label": "Indoor planting", "color": (245, 158, 11)},
+    2: {"label": "Biomorphic forms & patterns", "color": (255, 182, 193)},
     1: {"label": "Architectural / Hardscape", "color": (105, 105, 105)},
 }
 
+# String representation of colors for the data table
+COLOR_STR_MAP = {
+    5: "Green",
+    4: "Blue",
+    3: "Orange",
+    2: "Pink",
+    1: "Grey",
+}
+
 CATEGORY_DESCRIPTIONS = {
-    5: "External Nature (Trees, Water)",
-    4: "External Nature (Sky, Sand)",
-    3: "Internal Biophilia (Plants)",
-    2: "Internal Art (Nature Photos / Drawings)",
+    5: "Natural terrain; waterfront",
+    4: "Outdoor planting; Sky",
+    3: "Indoor planting",
+    2: "Biomorphic forms & patterns",
     1: "Architectural / Hardscape",
 }
 
@@ -132,14 +166,14 @@ def is_soft_nature_label(label: str) -> bool:
     return any(token in normalize_label(label) for token in ["sky", "cloud", "sand", "rock", "snow"])
 
 def get_domain_for_weight(weight: int) -> str:
-    if weight >= 4: return "External Nature"
-    if weight == 3: return "Internal Biophilia"
-    if weight == 2: return "Internal Art / Biomorphic"
+    if weight >= 4: return "Outdoor planting; Sky"
+    if weight == 3: return "Indoor planting"
+    if weight == 2: return "Biomorphic forms & patterns"
     return "Architectural / Hardscape"
 
 def get_category_info(label: str) -> dict[str, Any]:
-    if is_strong_nature_label(label): return {"weight": 5, "domain": "External Nature"}
-    if is_soft_nature_label(label): return {"weight": 4, "domain": "External Nature"}
+    if is_strong_nature_label(label): return {"weight": 5, "domain": "Natural terrain; waterfront"}
+    if is_soft_nature_label(label): return {"weight": 4, "domain": "Outdoor planting; Sky"}
     if is_aperture_label(label): return {"weight": 1, "domain": "Aperture (Window)"}
     return {"weight": 1, "domain": "Architectural / Hardscape"}
 
@@ -155,10 +189,10 @@ def apply_context_aware_classification(instances: list[dict[str, Any]]) -> list[
             updated["domain"] = "Architectural / Hardscape"
             updated["weight"] = 1
         elif is_strong_nature_label(label):
-            updated["domain"] = "External Nature"
+            updated["domain"] = "Natural terrain; waterfront"
             updated["weight"] = 5
         elif is_soft_nature_label(label):
-            updated["domain"] = "External Nature"
+            updated["domain"] = "Outdoor planting; Sky"
             updated["weight"] = 4
 
         if updated["pixels"] > MIN_INSTANCE_PIXELS:
@@ -336,6 +370,7 @@ def render_status() -> None:
 def process_pending_files(model_key: str) -> None:
     if not st.session_state.pending_files: return
     
+    # Custom prominent loading banner
     loading_placeholder = st.empty()
     loading_placeholder.markdown("""
         <div class="loading-banner">
@@ -447,42 +482,13 @@ def draw_canvas_image(image: Image.Image, points_data: list[dict], draft: dict |
 
     img_copy = Image.fromarray(base)
     draw = ImageDraw.Draw(img_copy)
-    
-    # Modernized simple dot without complex crosshairs to prevent tracking offset lag
-    radius = max(image.width // 150, 4) 
+    radius = max(image.width // 100, 4) 
     
     for point in points_data:
         x, y = point["coords"]
         color = "lime" if point["is_foreground"] else "red"
         draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=color, outline="white", width=2)
-        
     return img_copy
-
-def build_plotly_live_result(run: dict[str, Any]) -> go.Figure:
-    blended_np = np.array(build_overlay_image(run, "weighted"))
-    
-    hover_text = np.full((run["height"], run["width"]), "W1 - Architectural / Hardscape", dtype=object)
-    for inst in run["instances"]:
-        weight = int(inst["weight"])
-        label = WEIGHT_MAP[weight]['label']
-        hover_text[inst["mask"]] = f"Weight {weight}: {label}"
-        
-    fig = go.Figure(go.Image(
-        z=blended_np,
-        customdata=hover_text,
-        hovertemplate="<b>%{customdata}</b><extra></extra>", 
-    ))
-    
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=0, b=0),
-        xaxis=dict(visible=False, fixedrange=True),
-        yaxis=dict(visible=False, fixedrange=True, scaleanchor="x", scaleratio=1), 
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(0,0,0,0)",
-        hovermode="closest",
-        dragmode=False 
-    )
-    return fig
 
 
 init_state()
@@ -500,19 +506,20 @@ with st.container(border=True):
             key=f"uploader-{st.session_state.uploader_nonce}" 
         )
         
+        # Display uploaded pending files with option to remove
         if st.session_state.pending_files:
             st.markdown("**Pending Uploads:**")
             for idx, pending in enumerate(st.session_state.pending_files):
                 p_col1, p_col2 = st.columns([5, 1])
                 p_col1.write(pending["name"])
-                if p_col2.button("Remove", key=f"del_pen_{idx}"):
+                if p_col2.button("X", key=f"del_pen_{idx}"):
                     st.session_state.pending_files.pop(idx)
                     st.rerun()
 
     with col_process:
         st.write("") 
         st.write("") 
-        if st.button("Process Segmentation", use_container_width=True, type="primary"):
+        if st.button("Start Analysis", use_container_width=True, type="primary"):
             process_pending_files(DEFAULT_MODEL_KEY)
             st.rerun()
 
@@ -550,85 +557,111 @@ if st.session_state.runs:
         met_col1.metric("Average VQS for Viewpoint", f"{avg_vqs:.3f}")
         
         st.markdown("**Individual Frame Scores**")
-        st.table(pd.DataFrame(summary_rows))
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
 
-    # ---------------- IMAGE EDIT TABS ----------------
+# ---------------- IMAGE EDIT TABS ----------------
+    # Offset tab index by 1 since Summary is at index 0
     for idx, (file_id, run) in enumerate(st.session_state.runs.items(), start=1):
         with tabs[idx]:
-            # File Header
-            sum_col1, sum_col2 = st.columns([4, 1])
+            sum_col1, sum_col2, sum_col3 = st.columns([3, 1, 1])
             sum_col1.subheader(run["filename"])
-            if sum_col2.button("Remove Photo", key=f"remove-{file_id}", use_container_width=True):
+            sum_col2.metric("VQS for Frame", f"{run['score']:.3f}")
+            if sum_col3.button("Remove Photo", key=f"remove-{file_id}", use_container_width=True):
                 st.session_state.runs.pop(file_id, None)
                 st.session_state.interaction_points.pop(file_id, None)
                 st.rerun()
 
-            st.write("")
+            # ROW 1: Tables and Tools
+            top_col1, top_col2 = st.columns(2)
             
-            # ---------------- ROW 1: UI LAYER (Tables & Controls) ----------------
-            ui_col1, ui_col2 = st.columns(2)
+            # Pre-build the overlay image so we can use it for the download button
+            overlay_img = build_overlay_image(run, "weighted")
             
-            with ui_col1:
-                # Modern, horizontal layout for VQS display
-                st.markdown(
-                    f"""
-                    <div style="display: flex; align-items: baseline; gap: 12px; margin-bottom: 1.5rem;">
-                        <span style="font-size: 1.8rem; font-weight: 600; color: #334155;">VQS for Frame</span>
-                        <span style="font-size: 1.8rem; font-weight: 700; color: #0284c7; background-color: rgba(2, 132, 199, 0.1); padding: 0.2rem 1rem; border-radius: 8px;">{run['score']:.3f}</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-                
-                st.markdown("**Category Summary**")
-                
+            with top_col1:
+                st.markdown("### Category Summary")
                 pixels_by_weight = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
                 for inst in run["instances"]:
                     pixels_by_weight[int(inst["weight"])] += int(inst["pixels"])
                     
-                rows = [{"Category": CATEGORY_DESCRIPTIONS[w], "Weight": f"W{w}", "Pixels": pixels_by_weight[w]} for w in [5,4,3,2,1]]
+                # Update rows to include the newly mapped Color column
+                rows = [
+                    {
+                        "Category": CATEGORY_DESCRIPTIONS[w], 
+                        "Weight": f"W{w}", 
+                        "Color": COLOR_STR_MAP[w],
+                        "Pixels": pixels_by_weight[w]
+                    } 
+                    for w in [5,4,3,2,1]
+                ]
                 total_analyzed = sum(pixels_by_weight.values())
-                rows.append({"Category": "Total Analyzed Pixels", "Weight": "ALL", "Pixels": total_analyzed})
+                rows.append({"Category": "Total Analyzed Pixels", "Weight": "ALL", "Color": "-", "Pixels": total_analyzed})
                 
                 df_summary = pd.DataFrame(rows)
-                st.table(df_summary)
+                st.dataframe(df_summary, use_container_width=True, hide_index=True)
                 
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    csv_data = df_summary.to_csv(index=False).encode('utf-8')
-                    st.download_button("Download Summary CSV", data=csv_data, file_name=f"{run['filename']}_summary.csv", mime="text/csv", use_container_width=True)
-                with btn_col2:
-                    blended_img = build_overlay_image(run, "weighted")
-                    buf = io.BytesIO()
-                    blended_img.save(buf, format="PNG")
-                    img_bytes = buf.getvalue()
-                    st.download_button("Download Live Result Image", data=img_bytes, file_name=f"{run['filename']}_result.png", mime="image/png", use_container_width=True)
-
-            with ui_col2:
-                # Enlarged headers and instructions
-                st.markdown("<h3 style='margin-bottom: 0.5rem; color: #1e293b; font-size: 1.6rem;'>Fast Mask Refining (SAM Decoder) Controls</h3>", unsafe_allow_html=True)
-                st.markdown("<p style='font-size: 1.05rem; color: #475569; margin-bottom: 1.5rem;'>Select target weight and drop pins on the Interactive Canvas to refine masks.</p>", unsafe_allow_html=True)
+            with top_col2:
+                st.markdown("### Fine-tuning & Manual Assignment")
                 
                 ctrl_col1, ctrl_col2 = st.columns([2, 1.5])
                 with ctrl_col1:
                     target_w = st.selectbox("Assign Weight to Click", options=[5,4,3,2,1], format_func=lambda v: f"W{v} - {WEIGHT_MAP[v]['label']}", key=f"w-{file_id}")
                 with ctrl_col2:
                     pin_mode = st.radio("Pin Type", options=[True, False], format_func=lambda v: "Include" if v else "Exclude", horizontal=True, key=f"pin_mode_{file_id}")
-                
-                st.markdown("<p style='color: #0284c7; font-weight: 500; margin-top: -0.2rem;'>Pro tip: Start assigning weight for W4 - Sky for best results.</p>", unsafe_allow_html=True)
 
+                st.markdown("""
+                **Manaul Assignment:** Click **'Assign all other elements as W1'** when you have finished masking ALL VQ elements. This will permanently lock your selections and automatically assign **Weight 1** to all remaining unselected areas. Only use this button if the result by tool is totally unacceptable.
+                """)
+                if st.button("Assign all other elements as W1", type="primary", use_container_width=True, key=f"finish-{file_id}"):
+                    confirm_all_vq_elements(run)
+                    st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            mid_col1, mid_col2 = st.columns(2)
+            
+            with mid_col1:
+                dl_col1, dl_col2 = st.columns(2)
+                csv_data = df_summary.to_csv(index=False).encode('utf-8')
+                dl_col1.download_button(
+                    label="Download Category Summary",
+                    data=csv_data,
+                    file_name=f"{run['filename']}_summary.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"dl_csv_{file_id}"
+                )
+                
+                img_bytes = image_to_bytes(overlay_img, fmt="PNG")
+                dl_col2.download_button(
+                    label="Download Live Image",
+                    data=img_bytes,
+                    file_name=f"{run['filename']}_live.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"dl_img_{file_id}"
+                )
+
+            with mid_col2:
                 draft = run.get("draft")
                 points_data = st.session_state.interaction_points.get(file_id, [])
                 
-                # Dynamic action buttons
-                st.write("") 
-                if points_data:
+                if draft is not None and draft["weight"] != target_w and points_data:
+                    preview_interactive_sam(file_id, run, target_w)
+                    st.rerun()
+
+                if not points_data:
+                    st.info("Instruction: Select a Weight from the dropdown menu and click on the image to assign desired weighting.")
+                else:
                     act_col1, act_col2, act_col3 = st.columns(3)
+                    
                     if draft is not None:
-                        if act_col1.button("Confirm Mask", type="primary", use_container_width=True, key=f"conf-{file_id}"):
+                        if act_col1.button("Confirm & Lock Mask", type="primary", use_container_width=True, key=f"conf-{file_id}"):
                             confirm_draft(file_id, run)
                             st.session_state.interaction_points[file_id] = []
                             st.rerun()
+                    else:
+                        act_col1.empty()
+                            
                     if act_col2.button("Undo Last Pin", use_container_width=True, key=f"undo-{file_id}"):
                         st.session_state.interaction_points[file_id].pop()
                         if st.session_state.interaction_points[file_id]:
@@ -636,41 +669,40 @@ if st.session_state.runs:
                         else:
                             run["draft"] = None
                         st.rerun()
+                        
                     if act_col3.button("Cancel Draft", use_container_width=True, key=f"canc-{file_id}"):
                         st.session_state.interaction_points[file_id] = []
                         run["draft"] = None
                         st.rerun()
-                
-                st.divider()
-                st.markdown("**Finalize Assessment:** Click below to lock current inputs and auto-assign Weight 1 to unselected areas.")
-                if st.button("Confirm All VQ Elements Selected", type="primary", use_container_width=True, key=f"finish-{file_id}"):
-                    confirm_all_vq_elements(run)
-                    st.rerun()
 
-            # ---------------- ROW 2: IMAGE LAYER (Guaranteed Alignment) ----------------
-            st.write("") # Spacer between controls and images
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ROW 3: Images (Using a new column structure to ensure they stay perfectly top-aligned)
             img_col1, img_col2 = st.columns(2)
             
             with img_col1:
-                st.markdown("**Live Result** *(Hover over pixels to see weight)*")
-                fig = build_plotly_live_result(run)
-                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                st.markdown("**Result & Assigned Weights**")
+                st.image(overlay_img, use_container_width=True)
 
             with img_col2:
-                st.markdown("**Interactive Canvas** *(Click to drop a pin)*")
-                
-                if draft is not None and draft["weight"] != target_w and points_data:
-                    preview_interactive_sam(file_id, run, target_w)
-                    st.rerun()
-                
+                st.markdown("**Interactive Selection Canvas**") 
+
                 base_image = open_image_from_bytes(run["display_bytes"])
                 display_image = draw_canvas_image(base_image, points_data, draft)
                 
-                # standard use_column_width ensures 1:1 mapping of coordinates without arbitrary offset padding
+                # --- OFFSET FIX IMPLEMENTED HERE ---
+                UI_WIDTH = 650 
+                scale_factor = 1.0
+                if display_image.width > UI_WIDTH:
+                    scale_factor = display_image.width / UI_WIDTH
+                    new_height = int(display_image.height / scale_factor)
+                    ui_image = display_image.resize((UI_WIDTH, new_height), Image.Resampling.LANCZOS)
+                else:
+                    ui_image = display_image
+                
                 value = streamlit_image_coordinates(
-                    display_image,
+                    ui_image,
                     key=f"canvas-{file_id}",
-                    use_column_width=True, 
                 )
                 
                 tracker_key = f"last_click_{file_id}"
@@ -679,7 +711,11 @@ if st.session_state.runs:
 
                 if value is not None and value != st.session_state[tracker_key]:
                     st.session_state[tracker_key] = value
-                    point = [value["x"], value["y"]]
+                    
+                    # Map the returned UI coordinates accurately back to the intrinsic image scale
+                    point = [int(value["x"] * scale_factor), int(value["y"] * scale_factor)]
+                    
                     st.session_state.interaction_points[file_id].append({"coords": point, "is_foreground": pin_mode})
                     preview_interactive_sam(file_id, run, target_w)
                     st.rerun()
+                # -----------------------------------
