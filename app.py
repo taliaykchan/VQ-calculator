@@ -602,48 +602,14 @@ if st.session_state.runs:
             with top_col2:
                 st.markdown("### Fine-tuning & Manual Assignment")
                 
+                draft = run.get("draft")
+                points_data = st.session_state.interaction_points.get(file_id, [])
+
                 ctrl_col1, ctrl_col2 = st.columns([2, 1.5])
                 with ctrl_col1:
                     target_w = st.selectbox("Assign Weight to Click", options=[5,4,3,2,1], format_func=lambda v: f"W{v} - {WEIGHT_MAP[v]['label']}", key=f"w-{file_id}")
                 with ctrl_col2:
                     pin_mode = st.radio("Pin Type", options=[True, False], format_func=lambda v: "Include" if v else "Exclude", horizontal=True, key=f"pin_mode_{file_id}")
-
-                st.markdown("""
-                **Manaul Assignment:** Click **'Assign all other elements as W1'** when you have finished masking ALL VQ elements. This will permanently lock your selections and automatically assign **Weight 1** to all remaining unselected areas. Only use this button if the result by tool is totally unacceptable.
-                """)
-                if st.button("Assign all other elements as W1", type="primary", use_container_width=True, key=f"finish-{file_id}"):
-                    confirm_all_vq_elements(run)
-                    st.rerun()
-
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            mid_col1, mid_col2 = st.columns(2)
-            
-            with mid_col1:
-                dl_col1, dl_col2 = st.columns(2)
-                csv_data = df_summary.to_csv(index=False).encode('utf-8')
-                dl_col1.download_button(
-                    label="Download Category Summary",
-                    data=csv_data,
-                    file_name=f"{run['filename']}_summary.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    key=f"dl_csv_{file_id}"
-                )
-                
-                img_bytes = image_to_bytes(overlay_img, fmt="PNG")
-                dl_col2.download_button(
-                    label="Download Live Image",
-                    data=img_bytes,
-                    file_name=f"{run['filename']}_live.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"dl_img_{file_id}"
-                )
-
-            with mid_col2:
-                draft = run.get("draft")
-                points_data = st.session_state.interaction_points.get(file_id, [])
                 
                 if draft is not None and draft["weight"] != target_w and points_data:
                     preview_interactive_sam(file_id, run, target_w)
@@ -674,6 +640,41 @@ if st.session_state.runs:
                         st.session_state.interaction_points[file_id] = []
                         run["draft"] = None
                         st.rerun()
+
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            mid_col1, mid_col2 = st.columns(2)
+            
+            with mid_col1:
+                dl_col1, dl_col2 = st.columns(2)
+                csv_data = df_summary.to_csv(index=False).encode('utf-8')
+                dl_col1.download_button(
+                    label="Download Category Summary",
+                    data=csv_data,
+                    file_name=f"{run['filename']}_summary.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"dl_csv_{file_id}"
+                )
+                
+                img_bytes = image_to_bytes(overlay_img, fmt="PNG")
+                dl_col2.download_button(
+                    label="Download Live Image",
+                    data=img_bytes,
+                    file_name=f"{run['filename']}_live.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"dl_img_{file_id}"
+                )
+
+            with mid_col2:
+                st.markdown("""
+                **Manaul Assignment:** Click **'Assign all other elements as W1'** when you have finished masking ALL VQ elements. This will permanently lock your selections and automatically assign **Weight 1** to all remaining unselected areas. Only use this button if the result by tool is totally unacceptable.
+                """)
+                if st.button("Assign all other elements as W1", type="primary", use_container_width=True, key=f"finish-{file_id}"):
+                    confirm_all_vq_elements(run)
+                    st.rerun()
 
             st.markdown("<br>", unsafe_allow_html=True)
 
